@@ -318,9 +318,11 @@ class Imagine(nn.Module):
         ema_decay = 0.99,
         num_cutouts = 128,
         center_bias = False,
+        out_path = None
     ):
         super().__init__()
-
+        self.out_path = Path(out_path) if out_path is not None else Path.cwd()
+        
         if torch_deterministic:
             assert not bilinear, 'the deterministic (seeded) operation does not work with interpolation (PyTorch 1.7.1)'
             torch.set_deterministic(True)
@@ -371,6 +373,8 @@ class Imagine(nn.Module):
         self.clip_transform = create_clip_img_transform(224)
         # create starting encoding
         self.set_clip_encoding(text=text, img=img, encoding=encoding, text_min=text_min)
+        
+
     
     @property
     def seed_suffix(self):
@@ -427,12 +431,17 @@ class Imagine(nn.Module):
         
         if len(text_min) > 0:
             text = text + "_wout_" + text_min[:255] if text is not None else "wout_" + text_min[:255]
-        text_path = create_text_path(text=text, img=img, encoding=encoding)
+        text_name = create_text_path(text=text, img=img, encoding=encoding)
         if self.save_date_time:
-            text_path = datetime.now().strftime("%y%m%d-%H%M%S-") + text_path
+            text_name = datetime.now().strftime("%y%m%d-%H%M%S-") + text_name
 
-        self.text_path = text_path
-        self.filename = Path(f'./{text_path}{self.seed_suffix}.png')
+        self.text_name = text_name
+        self.filename_str = f"{text_name}{self.seed_suffix}.png"
+        
+        self.out_dir = self.out_path.joinpath(text_name)
+        self.out_dir.mkdir(exist_ok=True, parents=True)
+        self.filename = self.out_dir.joinpath(self.filename_str)
+        
         self.encode_max_and_min(text, img=img, encoding=encoding, text_min=text_min) # Tokenize and encode each prompt
 
     def reset(self):
@@ -465,16 +474,20 @@ class Imagine(nn.Module):
                 if pbar is not None:
                     pbar.update(1)
                 else:
-                    print(f'image updated at "./{str(self.filename)}"')
+                    print(f'image updated at "{str(self.filename)}"')
 
                 if self.save_progress:
                     total_iterations = epoch * self.iterations + i
                     num = total_iterations // self.save_every
-                    save_image(image, Path(f'./{self.text_path}.{num}{self.seed_suffix}.png'))
+                    out_fname = f'{self.text_name}.{num}{self.seed_suffix}.png'
+                    out_fpath = self.out_dir.joinpath(out_fname)
+                    save_image(image, out_fpath)
 
                 if self.save_best and top_score.item() < self.current_best_score:
                     self.current_best_score = top_score.item()
-                    save_image(image, Path(f'./{self.text_path}{self.seed_suffix}.best.png'))
+                    out_fname_best = f'{self.text_name}{self.seed_suffix}.best.png'
+                    out_fpath_best = self.out_dir.joinpath(out_fname_best)
+                    save_image(image, out_fpath_best)
 
         return out, total_loss
 
@@ -482,7 +495,7 @@ class Imagine(nn.Module):
         penalizing = ""
         if len(self.text_min) > 0:
             penalizing = f'penalizing "{self.text_min}"'
-        print(f'Imagining "{self.text_path}" {penalizing}...')
+        print(f'Imagining "{self.text_name}" {penalizing}...')
         
         with torch.no_grad():
             self.model(self.encoded_texts["max"][0]) # one warmup step due to issue with CLIP and CUDA
