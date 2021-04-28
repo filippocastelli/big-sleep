@@ -514,4 +514,4 @@ class Imagine(nn.Module):
 
                 if terminate:
                     print('detecting keyboard interrupt, gracefully exiting')
-                    return
+                    return -1
