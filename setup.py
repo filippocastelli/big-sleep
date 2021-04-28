@@ -5,7 +5,7 @@ sys.path[0:0] = ['big_sleep']
 from version import __version__
 
 setup(
-  name = 'big-sleep',
+  name = 'big-sleep-automated-dreamer',
   packages = find_packages(),
   include_package_data = True,
   entry_points={
